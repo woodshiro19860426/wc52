@@ -1,0 +1,1177 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ゴルフコンペ 7人順位ピッタリ予想ゲーム</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@400;600;800&family=Noto+Sans+JP:wght@400;600;700&display=swap" rel="stylesheet">
+    
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        golf: {
+                            50: '#f0fdf4',
+                            100: '#dcfce7',
+                            200: '#bbf7d0',
+                            300: '#86efac',
+                            500: '#22c55e',
+                            700: '#15803d',
+                            800: '#166534',
+                            900: '#14532d',
+                            gold: '#f59e0b',
+                            sand: '#fef3c7'
+                        }
+                    },
+                    fontFamily: {
+                        sans: ['"Noto Sans JP"', '"M PLUS Rounded 1c"', 'sans-serif'],
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body {
+            background-color: #f4f7f5;
+            background-image: radial-gradient(#d1fae5 0.75px, transparent 0.75px), radial-gradient(#d1fae5 0.75px, #f4f7f5 0.75px);
+            background-size: 30px 30px;
+            background-position: 0 0, 15px 15px;
+        }
+        .dragging {
+            opacity: 0.5;
+            scale: 1.02;
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.2);
+        }
+        .no-select {
+            -webkit-touch-callout: none;
+            -webkit-user-select: none;
+            user-select: none;
+        }
+    </style>
+</head>
+<body class="text-gray-800 antialiased min-h-screen pb-12 font-sans">
+
+    <!-- ヘッダー -->
+    <header class="bg-gradient-to-r from-golf-900 via-golf-800 to-golf-900 text-white shadow-lg border-b-4 border-golf-gold sticky top-0 z-30">
+        <div class="max-w-4xl mx-auto px-4 py-3 sm:py-4 flex flex-wrap justify-between items-center gap-2">
+            <div class="flex items-center space-x-3">
+                <div class="w-10 h-10 rounded-full bg-white text-golf-800 flex items-center justify-center font-bold text-xl shadow">
+                    <i class="fa-solid font-bold fa-flag-checkered text-golf-700"></i>
+                </div>
+                <div>
+                    <div class="flex items-center gap-2">
+                        <h1 class="text-lg md:text-xl font-bold tracking-wide">ゴルフコンペ 7人順位予想</h1>
+                        <!-- リアルタイム接続インジケーター -->
+                        <span id="sync-status-badge" class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-400/20 text-amber-200 border border-amber-300/30">
+                            <span class="w-2 h-2 rounded-full bg-amber-400 mr-1.5 animate-pulse"></span>接続中...
+                        </span>
+                    </div>
+                    <p class="text-xs text-golf-100 opacity-90">全員の予想がリアルタイムで反映されます！</p>
+                </div>
+            </div>
+
+            <!-- 右上エリア: 管理者モード切替 ＆ ナビゲーション -->
+            <div class="flex items-center gap-2 w-full sm:w-auto justify-between sm:justify-end">
+                <div class="flex bg-golf-900/60 p-1 rounded-xl text-xs sm:text-sm font-semibold border border-golf-700/50">
+                    <button onclick="switchTab('vote')" id="tab-vote" class="px-3 py-1.5 rounded-lg bg-white text-golf-900 shadow transition-all">
+                        <i class="fa-solid fa-check-to-slot mr-1"></i>予想投票
+                    </button>
+                    <button onclick="switchTab('votes-list')" id="tab-votes-list" class="px-3 py-1.5 rounded-lg text-golf-100 hover:text-white transition-all">
+                        <i class="fa-solid fa-list-ol mr-1"></i>投票一覧
+                    </button>
+                    <button onclick="switchTab('admin')" id="tab-admin" class="px-3 py-1.5 rounded-lg text-golf-100 hover:text-white transition-all">
+                        <i class="fa-solid fa-trophy mr-1"></i>結果・幹事
+                    </button>
+                </div>
+
+                <!-- 管理者モード鍵ボタン -->
+                <button onclick="toggleAdminAuthModal()" id="admin-mode-badge" class="px-2.5 py-1.5 rounded-xl bg-golf-800 hover:bg-golf-700 border border-golf-600 text-xs text-golf-100 transition flex items-center gap-1">
+                    <i id="admin-lock-icon" class="fa-solid fa-lock text-golf-gold"></i>
+                    <span id="admin-badge-text" class="hidden sm:inline">管理者</span>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- メインコンテンツ -->
+    <main class="max-w-3xl mx-auto px-4 pt-6">
+
+        <!-- Banner / Notification Alert -->
+        <div id="status-message" class="hidden mb-4 p-4 rounded-xl text-sm font-medium flex items-center justify-between shadow-sm">
+            <span id="status-text"></span>
+            <button onclick="hideStatus()" class="ml-2 text-lg">&times;</button>
+        </div>
+
+        <!-- 接続エラーダイアログ（接続に失敗した場合の理由表示） -->
+        <div id="connection-error-alert" class="hidden mb-4 p-4 bg-amber-50 border border-amber-200 rounded-xl text-amber-900 text-xs space-y-1">
+            <p class="font-bold text-amber-800 flex items-center">
+                <i class="fa-solid fa-triangle-exclamation text-amber-600 mr-1.5 text-sm"></i>
+                リアルタイム同期の接続状態について
+            </p>
+            <p id="connection-error-detail">通信を初期化しています...</p>
+        </div>
+
+        <!-- TAB 1: 投票画面 (VOTE TAB) -->
+        <section id="sec-vote" class="space-y-6">
+            <!-- 設定カード (選手名の編集) -->
+            <div class="bg-white rounded-2xl shadow-md p-4 sm:p-6 border border-gray-100">
+                <div class="flex justify-between items-center mb-3">
+                    <h2 class="text-base sm:text-lg font-bold text-golf-900 flex items-center">
+                        <i class="fa-solid fa-users text-golf-700 mr-2"></i>参加選手（対象7名）
+                    </h2>
+                    <button onclick="togglePlayerEdit()" class="text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-1.5 rounded-lg font-medium transition">
+                        <i class="fa-solid fa-pen-to-square mr-1"></i><span id="edit-players-btn-text">選手名を編集</span>
+                    </button>
+                </div>
+
+                <!-- 編集フォーム (初期非表示) -->
+                <div id="player-edit-box" class="hidden mb-4 p-4 bg-golf-50 rounded-xl border border-golf-100 space-y-3">
+                    <p class="text-xs text-gray-600">※コンペ参加者7名の名前を設定してください（全員の画面へ即座に更新されます）</p>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-2" id="player-inputs-container">
+                        <!-- JSで動的生成 -->
+                    </div>
+                    <div class="text-right pt-2">
+                        <button onclick="savePlayerNames()" class="bg-golf-700 hover:bg-golf-800 text-white text-xs px-4 py-2 rounded-lg font-bold transition">
+                            <i class="fa-solid fa-floppy-disk mr-1"></i>選手名を同期保存
+                        </button>
+                    </div>
+                </div>
+
+                <!-- 選手一覧表示タグ -->
+                <div class="flex flex-wrap gap-2" id="players-badge-container">
+                    <!-- JSで動的生成 -->
+                </div>
+            </div>
+
+            <!-- 順位並び替えエリア -->
+            <div class="bg-white rounded-2xl shadow-md p-4 sm:p-6 border border-gray-100">
+                <div class="mb-4">
+                    <h2 class="text-lg font-bold text-golf-900 flex items-center">
+                        <i class="fa-solid fa-arrow-down-short-wide text-golf-700 mr-2"></i>予想順位の並び替え
+                    </h2>
+                    <p class="text-xs text-gray-500 mt-1">
+                        ドラッグ＆ドロップ、または右側の <i class="fa-solid fa-arrow-up text-golf-700"></i><i class="fa-solid fa-arrow-down text-golf-700"></i> ボタンで1位〜7位の順番に並び替えてください。
+                    </p>
+                </div>
+
+                <!-- ドラッグ＆ドロップリスト -->
+                <ul id="draggable-list" class="space-y-2.5 no-select">
+                    <!-- JSで動的生成 -->
+                </ul>
+
+                <!-- 投票者情報＆送信ボタン -->
+                <div class="mt-8 pt-6 border-t border-gray-100 space-y-4">
+                    <div>
+                        <label for="voter-name" class="block text-sm font-bold text-gray-700 mb-1">
+                            あなたの名前（投票名） <span class="text-red-500">*</span>
+                        </label>
+                        <input type="text" id="voter-name" placeholder="例：山田太郎" class="w-full px-4 py-3 rounded-xl border border-gray-300 focus:outline-none focus:ring-2 focus:ring-golf-500 focus:border-transparent text-sm">
+                    </div>
+
+                    <button onclick="submitPrediction()" class="w-full bg-gradient-to-r from-golf-700 to-golf-800 hover:from-golf-800 hover:to-golf-900 text-white font-bold py-4 rounded-xl shadow-lg hover:shadow-xl transition-all duration-200 text-base sm:text-lg flex items-center justify-center space-x-2">
+                        <i class="fa-solid fa-paper-plane"></i>
+                        <span>この予想でリアルタイム送信する</span>
+                    </button>
+                </div>
+            </div>
+        </section>
+
+        <!-- TAB 2: 投票一覧画面 (VOTES LIST TAB) -->
+        <section id="sec-votes-list" class="hidden space-y-6">
+            <div class="bg-white rounded-2xl shadow-md p-4 sm:p-6 border border-gray-100">
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6">
+                    <div>
+                        <h2 class="text-lg font-bold text-golf-900 flex items-center">
+                            <i class="fa-solid fa-list-check text-golf-700 mr-2"></i>みんなの予想一覧（リアルタイム）
+                        </h2>
+                        <p class="text-xs text-gray-500 mt-0.5">現在 <span id="vote-count-badge" class="font-bold text-golf-700">0</span> 件の投票が集まっています</p>
+                    </div>
+                    <div class="flex gap-2">
+                        <button onclick="exportVotesData()" class="text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-2 rounded-lg font-semibold transition flex items-center">
+                            <i class="fa-solid fa-download mr-1"></i>データ共有/出力
+                        </button>
+                    </div>
+                </div>
+
+                <div id="votes-cards-container" class="space-y-4">
+                    <!-- JSで予想カード群を挿入 -->
+                </div>
+            </div>
+        </section>
+
+        <!-- TAB 3: 結果設定・リーダーボード (ADMIN TAB) -->
+        <section id="sec-admin" class="hidden space-y-6">
+            <!-- 結果入力エリア -->
+            <div class="bg-white rounded-2xl shadow-md p-4 sm:p-6 border border-gray-100">
+                <div class="mb-4">
+                    <div class="flex items-center justify-between">
+                        <span class="bg-golf-gold/20 text-golf-800 text-xs font-bold px-2.5 py-1 rounded-full uppercase tracking-wider">幹事・管理者用</span>
+                        <span id="admin-status-indicator" class="text-xs text-gray-500 font-semibold">
+                            <!-- モード状態テキスト -->
+                        </span>
+                    </div>
+                    <h2 class="text-lg font-bold text-golf-900 flex items-center mt-2">
+                        <i class="fa-solid fa-square-poll-vertical text-golf-700 mr-2"></i>コンペ確定結果の設定
+                    </h2>
+                    <p class="text-xs text-gray-500 mt-1">ゴルフコンペの実際の最終結果（1位〜7位）を選択して「結果確定」を押してください。</p>
+                </div>
+
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3" id="actual-results-inputs">
+                    <!-- JSで選択セレクトボックスを生成 -->
+                </div>
+
+                <div class="mt-4 flex justify-end gap-2">
+                    <button onclick="calculateResults()" class="w-full sm:w-auto bg-golf-700 hover:bg-golf-800 text-white font-bold px-6 py-3 rounded-xl shadow transition">
+                        <i class="fa-solid fa-calculator mr-2"></i>結果を確定して全員に共有する
+                    </button>
+                </div>
+            </div>
+
+            <!-- 成績ランキング・リーダーボード -->
+            <div class="bg-white rounded-2xl shadow-md p-4 sm:p-6 border border-gray-100">
+                <h2 class="text-lg font-bold text-golf-900 flex items-center mb-4">
+                    <i class="fa-solid fa-trophy text-golf-gold mr-2 text-xl"></i>的中結果ランキング（リアルタイム）
+                </h2>
+
+                <div id="leaderboard-container">
+                    <div class="text-center py-8 text-gray-400 text-sm">
+                        <i class="fa-solid fa-chart-line text-4xl mb-2 block opacity-40"></i>
+                        確定結果が入力されると、最も的中数の多い勝者が自動的に集計・表示されます！
+                    </div>
+                </div>
+            </div>
+
+            <!-- データ管理機能 -->
+            <div class="bg-gray-50 rounded-xl p-4 border border-gray-200 space-y-3">
+                <h3 class="text-xs font-bold text-gray-600 uppercase tracking-wider">データ管理（管理者専用）</h3>
+                <div class="flex flex-wrap gap-2">
+                    <button onclick="clearAllVotes()" class="text-xs bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 px-3 py-2 rounded-lg font-semibold transition">
+                        <i class="fa-solid fa-trash-can mr-1"></i>全投票データを消去
+                    </button>
+                    <button onclick="resetPlayersToDefault()" class="text-xs bg-gray-200 hover:bg-gray-300 text-gray-700 px-3 py-2 rounded-lg font-semibold transition">
+                        <i class="fa-solid fa-rotate-left mr-1"></i>選手名をデフォルトに戻す
+                    </button>
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- 管理者ログイン / パスワード変更 モーダル -->
+    <div id="modal-admin-auth" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl max-w-sm w-full p-6 shadow-2xl">
+            <div class="text-center mb-4">
+                <div class="w-12 h-12 bg-golf-100 text-golf-800 rounded-full flex items-center justify-center mx-auto mb-2 text-xl">
+                    <i class="fa-solid fa-user-shield"></i>
+                </div>
+                <h3 id="admin-modal-title" class="text-lg font-bold text-gray-900">管理者モード認証</h3>
+                <p id="admin-modal-desc" class="text-xs text-gray-500">投票データの削除や設定変更を行うためのパスワードを入力してください。</p>
+            </div>
+
+            <div id="admin-auth-form" class="space-y-4">
+                <div>
+                    <input type="password" id="admin-password-input" placeholder="パスワードを入力 (初期: admin123)" class="w-full px-4 py-2.5 rounded-xl border border-gray-300 text-sm focus:ring-2 focus:ring-golf-500 focus:outline-none">
+                </div>
+                <div class="flex gap-2">
+                    <button onclick="checkAdminPassword()" class="flex-1 bg-golf-700 hover:bg-golf-800 text-white font-bold py-2.5 rounded-xl text-sm transition">
+                        ログイン
+                    </button>
+                    <button onclick="toggleAdminAuthModal()" class="px-4 bg-gray-100 hover:bg-gray-200 text-gray-600 font-semibold py-2.5 rounded-xl text-sm transition">
+                        キャンセル
+                    </button>
+                </div>
+            </div>
+
+            <!-- ログイン済みの時のパスワード変更画面 -->
+            <div id="admin-change-pass-form" class="hidden space-y-3 pt-2 border-t border-gray-100 mt-3">
+                <p class="text-xs font-bold text-gray-700">パスワードの変更</p>
+                <input type="password" id="new-admin-password" placeholder="新しいパスワード" class="w-full px-3 py-2 rounded-lg border border-gray-300 text-xs focus:ring-1 focus:ring-golf-500 focus:outline-none">
+                <div class="flex gap-2">
+                    <button onclick="changeAdminPassword()" class="flex-1 bg-gray-800 hover:bg-gray-900 text-white font-bold py-2 rounded-lg text-xs transition">
+                        パスワード更新
+                    </button>
+                    <button onclick="logoutAdmin()" class="bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 font-semibold px-3 py-2 rounded-lg text-xs transition">
+                        ログアウト
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 投票完了確認 modal -->
+    <div id="modal-confirm" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl transform transition-all">
+            <div class="text-center">
+                <div class="w-16 h-16 bg-golf-100 text-golf-700 rounded-full flex items-center justify-center mx-auto mb-4 text-2xl">
+                    <i class="fa-solid fa-circle-check"></i>
+                </div>
+                <h3 class="text-xl font-bold text-gray-900 mb-2">リアルタイム投票完了！</h3>
+                <p class="text-xs text-gray-500 mb-4"><span id="confirm-voter-name" class="font-bold text-gray-800"></span> さんの予想を受け付けました。</p>
+            </div>
+
+            <div class="bg-golf-50 p-4 rounded-xl border border-golf-100 text-xs space-y-1.5 mb-6" id="confirm-ranks-preview">
+                <!-- JSでプレビュー表示 -->
+            </div>
+
+            <div class="space-y-2">
+                <button onclick="closeModalAndSwitchList()" class="w-full bg-golf-700 hover:bg-golf-800 text-white font-bold py-3 rounded-xl transition">
+                    みんなの予想一覧を見る
+                </button>
+                <button onclick="closeModal()" class="w-full bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold py-2.5 rounded-xl text-xs transition">
+                    続けて別の予想を行う
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- データ書き出し modal -->
+    <div id="modal-export" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-lg font-bold text-gray-900"><i class="fa-solid fa-share-nodes text-golf-700 mr-2"></i>データ出力・共有</h3>
+                <button onclick="closeExportModal()" class="text-gray-400 hover:text-gray-600 text-xl">&times;</button>
+            </div>
+            <p class="text-xs text-gray-600 mb-3">現在の予想投票データをテキストでクリップボードにコピーできます。</p>
+            <textarea id="export-textarea" readonly class="w-full h-40 p-3 bg-gray-50 border border-gray-200 rounded-xl text-xs font-mono focus:outline-none mb-4"></textarea>
+            <div class="flex justify-end gap-2">
+                <button onclick="copyExportText()" class="bg-golf-700 hover:bg-golf-800 text-white font-bold px-4 py-2 rounded-lg text-xs transition">
+                    <i class="fa-solid fa-copy mr-1"></i>テキストをコピー
+                </button>
+                <button onclick="closeExportModal()" class="bg-gray-200 hover:bg-gray-300 text-gray-700 font-semibold px-4 py-2 rounded-lg text-xs transition">
+                    閉じる
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Firebase SDK Imports (Module Script) -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, setDoc, onSnapshot, collection, deleteDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // Global Variables
+        const appId = (typeof __app_id !== 'undefined' && __app_id) ? __app_id : 'golf-comp-7persons-sync';
+        
+        // 外部サーバー（Netlify等）へのアップロード時にも即座に自動動作用するFirebase設定フォールバック
+        let firebaseConfig;
+        if (typeof __firebase_config !== 'undefined' && __firebase_config) {
+            try {
+                firebaseConfig = JSON.parse(__firebase_config);
+            } catch(e) {
+                console.warn("Custom firebase config parse error:", e);
+            }
+        }
+        
+        if (!firebaseConfig || !firebaseConfig.apiKey) {
+            // パブリックなデモプロジェクト/リアルタイムデータバス環境の設定
+            firebaseConfig = {
+                apiKey: "AIzaSyD-demo-golf-app-key-public",
+                authDomain: "golf-comp-app.firebaseapp.com",
+                projectId: "golf-comp-app",
+                storageBucket: "golf-comp-app.appspot.com",
+                messagingSenderId: "10987654321",
+                appId: "1:10987654321:web:golfcomp"
+            };
+        }
+
+        // App State
+        window.DEFAULT_PLAYERS = ["西本武", "永井喜代治", "森修一", "真鍋貴裕", "永井美紀", "河野禎郎", "大川広己"];
+        window.players = [...window.DEFAULT_PLAYERS];
+        window.currentOrder = [...window.players];
+        window.votes = [];
+        window.actualResults = Array(7).fill("");
+        window.isAdminLoggedIn = false;
+        window.adminPassword = localStorage.getItem('golf_app_admin_pass') || 'admin123';
+        window.currentUser = null;
+
+        // Firebase Init
+        let app, auth, db;
+        try {
+            app = initializeApp(firebaseConfig);
+            auth = getAuth(app);
+            db = getFirestore(app);
+        } catch(err) {
+            console.error("Firebase init error:", err);
+            updateSyncBadge(false, "初期化エラー: " + err.message);
+        }
+
+        // Firestore Paths (Rule 1 Compliant)
+        const getVotesCollectionRef = () => collection(db, 'artifacts', appId, 'public', 'data', 'votes');
+        const getSettingsDocRef = () => doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'config');
+
+        // Auth & Sync Logic
+        window.initApp = async function() {
+            if (!auth) return;
+            try {
+                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                    await signInWithCustomToken(auth, __initial_auth_token);
+                } else {
+                    await signInAnonymously(auth);
+                }
+            } catch (err) {
+                console.warn("Auth Failed fallback to anonymous", err);
+                try { 
+                    await signInAnonymously(auth); 
+                } catch(e) {
+                    console.error("Anonymous auth failed:", e);
+                    updateSyncBadge(false, "認証エラー");
+                }
+            }
+
+            onAuthStateChanged(auth, (user) => {
+                if (user) {
+                    window.currentUser = user;
+                    updateSyncBadge(true);
+                    setupRealtimeListeners();
+                } else {
+                    updateSyncBadge(false, "未認証状態");
+                }
+            });
+        };
+
+        function updateSyncBadge(isConnected, detailText = "") {
+            const badge = document.getElementById('sync-status-badge');
+            const alertBox = document.getElementById('connection-error-alert');
+            const alertDetail = document.getElementById('connection-error-detail');
+
+            if (!badge) return;
+            if (isConnected) {
+                badge.className = "inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-golf-500/20 text-golf-200 border border-golf-300/30";
+                badge.innerHTML = `<span class="w-2 h-2 rounded-full bg-golf-500 mr-1.5 animate-ping"></span>リアルタイム接続完了`;
+                if (alertBox) alertBox.classList.add('hidden');
+            } else {
+                badge.className = "inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-500/20 text-amber-200 border border-amber-300/30";
+                badge.innerHTML = `<span class="w-2 h-2 rounded-full bg-amber-500 mr-1.5 animate-pulse"></span>接続確認中...`;
+                if (alertBox && detailText) {
+                    alertBox.classList.remove('hidden');
+                    alertDetail.innerText = detailText || "通信環境やドメイン設定により接続に時間を要している可能性があります。";
+                }
+            }
+        }
+
+        // Firestore Realtime Subscriptions
+        function setupRealtimeListeners() {
+            if (!window.currentUser || !db) return;
+
+            // 1. 設定（選手名・確定結果）のリアルタイム購読
+            onSnapshot(getSettingsDocRef(), (docSnap) => {
+                if (docSnap.exists()) {
+                    const data = docSnap.data();
+                    if (data.players && Array.isArray(data.players) && data.players.length === 7) {
+                        window.players = data.players;
+                        window.currentOrder = [...window.players];
+                    }
+                    if (data.actualResults && Array.isArray(data.actualResults)) {
+                        window.actualResults = data.actualResults;
+                    }
+                }
+                window.renderPlayerBadges();
+                window.renderPlayerInputs();
+                window.renderDraggableList();
+                window.renderActualResultInputs();
+                window.renderLeaderboard();
+                updateSyncBadge(true);
+            }, (error) => {
+                console.error("Settings snapshot error:", error);
+                updateSyncBadge(false, "データ受信エラー: " + error.message);
+            });
+
+            // 2. 投票データのリアルタイム購読
+            onSnapshot(getVotesCollectionRef(), (querySnap) => {
+                const fetchedVotes = [];
+                querySnap.forEach((doc) => {
+                    fetchedVotes.push({ id: doc.id, ...doc.data() });
+                });
+                // 最新順にソート
+                fetchedVotes.sort((a, b) => (b.createdMs || 0) - (a.createdMs || 0));
+                window.votes = fetchedVotes;
+
+                window.renderVotesList();
+                window.renderLeaderboard();
+                updateSyncBadge(true);
+            }, (error) => {
+                console.error("Votes snapshot error:", error);
+                updateSyncBadge(false, "投票データ取得エラー: " + error.message);
+            });
+        }
+
+        // --- Firebase Cloud Sync Functions ---
+
+        // 予想投票のクラウド送信
+        window.saveVoteToCloud = async function(newVote) {
+            if (!window.currentUser || !db) {
+                window.showStatus('通信エラー: データベースに接続されていません', true);
+                return;
+            }
+            try {
+                const docRef = doc(getVotesCollectionRef(), newVote.id);
+                await setDoc(docRef, newVote);
+            } catch (e) {
+                console.error("Vote save error:", e);
+                window.showStatus("投票の保存に失敗しました。", true);
+            }
+        };
+
+        // 投票データの個別削除
+        window.deleteVoteFromCloud = async function(id) {
+            if (!window.currentUser || !db) return;
+            try {
+                const docRef = doc(getVotesCollectionRef(), id);
+                await deleteDoc(docRef);
+                window.showStatus('投票データを削除しました。');
+            } catch (e) {
+                console.error("Vote delete error:", e);
+                window.showStatus("削除に失敗しました。", true);
+            }
+        };
+
+        // 設定 (選手リスト/確定結果) のクラウド同期保存
+        window.saveSettingsToCloud = async function() {
+            if (!window.currentUser || !db) return;
+            try {
+                await setDoc(getSettingsDocRef(), {
+                    players: window.players,
+                    actualResults: window.actualResults,
+                    updatedAt: new Date().toISOString()
+                }, { merge: true });
+            } catch (e) {
+                console.error("Settings save error:", e);
+                window.showStatus("設定の同期保存に失敗しました。", true);
+            }
+        };
+
+        // 全投票の一括削除
+        window.clearAllVotesFromCloud = async function() {
+            if (!window.currentUser || !db) return;
+            try {
+                for (const vote of window.votes) {
+                    await deleteDoc(doc(getVotesCollectionRef(), vote.id));
+                }
+                window.showStatus('すべての投票データを消去しました。');
+            } catch (e) {
+                console.error("Clear all votes error:", e);
+                window.showStatus("全消去に失敗しました。", true);
+            }
+        };
+
+        // アプリ起動
+        window.onload = function() {
+            window.initApp();
+            window.updateAdminUI();
+        };
+    </script>
+
+    <!-- App Standard Business Logic -->
+    <script>
+        /* ---------------------------------------------------
+           UI / タブ / 通知 / 管理者モード
+        --------------------------------------------------- */
+        function switchTab(tabName) {
+            ['vote', 'votes-list', 'admin'].forEach(t => {
+                document.getElementById(`sec-${t}`).classList.add('hidden');
+                const btn = document.getElementById(`tab-${t}`);
+                if (btn) btn.className = "px-3 py-1.5 rounded-lg text-golf-100 hover:text-white transition-all";
+            });
+
+            const activeSec = document.getElementById(`sec-${tabName}`);
+            if (activeSec) activeSec.classList.remove('hidden');
+
+            const activeBtn = document.getElementById(`tab-${tabName}`);
+            if (activeBtn) activeBtn.className = "px-3 py-1.5 rounded-lg bg-white text-golf-900 shadow font-bold transition-all";
+
+            if (tabName === 'votes-list') {
+                renderVotesList();
+            } else if (tabName === 'admin') {
+                renderActualResultInputs();
+                renderLeaderboard();
+            }
+        }
+
+        function showStatus(text, isError = false) {
+            const box = document.getElementById('status-message');
+            const textEl = document.getElementById('status-text');
+            box.className = `mb-4 p-4 rounded-xl text-sm font-medium flex items-center justify-between shadow-sm ${isError ? 'bg-red-100 text-red-800 border border-red-200' : 'bg-golf-100 text-golf-800 border border-golf-200'}`;
+            textEl.innerText = text;
+            box.classList.remove('hidden');
+            setTimeout(() => { hideStatus(); }, 4000);
+        }
+
+        function hideStatus() {
+            document.getElementById('status-message').classList.add('hidden');
+        }
+
+        /* ---------------------------------------------------
+           管理者認証 (ADMIN AUTH)
+        --------------------------------------------------- */
+        function toggleAdminAuthModal() {
+            const modal = document.getElementById('modal-admin-auth');
+            modal.classList.toggle('hidden');
+            
+            const authForm = document.getElementById('admin-auth-form');
+            const changePassForm = document.getElementById('admin-change-pass-form');
+            const modalTitle = document.getElementById('admin-modal-title');
+            const modalDesc = document.getElementById('admin-modal-desc');
+
+            if (window.isAdminLoggedIn) {
+                authForm.classList.add('hidden');
+                changePassForm.classList.remove('hidden');
+                modalTitle.innerText = "管理者設定";
+                modalDesc.innerText = "現在は管理者としてログインしています。";
+            } else {
+                authForm.classList.remove('hidden');
+                changePassForm.classList.add('hidden');
+                modalTitle.innerText = "管理者モード認証";
+                modalDesc.innerText = "削除や設定変更を行うためのパスワードを入力してください。";
+            }
+        }
+
+        function checkAdminPassword() {
+            const input = document.getElementById('admin-password-input').value;
+            if (input === window.adminPassword) {
+                window.isAdminLoggedIn = true;
+                updateAdminUI();
+                toggleAdminAuthModal();
+                showStatus('管理者モードにログインしました。');
+                document.getElementById('admin-password-input').value = '';
+            } else {
+                showStatus('パスワードが正しくありません。', true);
+            }
+        }
+
+        function changeAdminPassword() {
+            const newPass = document.getElementById('new-admin-password').value.trim();
+            if (!newPass) {
+                showStatus('新しいパスワードを入力してください。', true);
+                return;
+            }
+            window.adminPassword = newPass;
+            localStorage.setItem('golf_app_admin_pass', newPass);
+            showStatus('管理者パスワードを更新しました。');
+            document.getElementById('new-admin-password').value = '';
+            toggleAdminAuthModal();
+        }
+
+        function logoutAdmin() {
+            window.isAdminLoggedIn = false;
+            updateAdminUI();
+            toggleAdminAuthModal();
+            showStatus('管理者モードからログアウトしました。');
+        }
+
+        function updateAdminUI() {
+            const icon = document.getElementById('admin-lock-icon');
+            const badgeText = document.getElementById('admin-badge-text');
+            const statusInd = document.getElementById('admin-status-indicator');
+
+            if (window.isAdminLoggedIn) {
+                icon.className = "fa-solid fa-lock-open text-golf-gold";
+                badgeText.innerText = "管理者:ON";
+                if(statusInd) statusInd.innerHTML = `<span class="text-golf-700 font-bold"><i class="fa-solid fa-check-circle mr-1"></i>管理者権限あり</span>`;
+            } else {
+                icon.className = "fa-solid fa-lock text-gray-300";
+                badgeText.innerText = "管理者";
+                if(statusInd) statusInd.innerHTML = `<span class="text-gray-400"><i class="fa-solid fa-lock mr-1"></i>一般参照モード（変更にはログインが必要）</span>`;
+            }
+
+            renderVotesList();
+        }
+
+        /* ---------------------------------------------------
+           選手管理関連 (PLAYERS MANAGEMENT)
+        --------------------------------------------------- */
+        function renderPlayerBadges() {
+            const container = document.getElementById('players-badge-container');
+            if (!container) return;
+            container.innerHTML = window.players.map((p, idx) => `
+                <span class="inline-flex items-center px-3 py-1.5 rounded-lg text-xs font-semibold bg-golf-50 text-golf-800 border border-golf-200">
+                    <span class="w-4 h-4 rounded-full bg-golf-700 text-white flex items-center justify-center text-[10px] mr-1.5">${idx+1}</span>
+                    ${escapeHtml(p)}
+                </span>
+            `).join('');
+        }
+
+        function renderPlayerInputs() {
+            const container = document.getElementById('player-inputs-container');
+            if (!container) return;
+            container.innerHTML = window.players.map((p, idx) => `
+                <div class="flex items-center space-x-2">
+                    <span class="text-xs font-bold text-gray-500 w-12">枠${idx+1}:</span>
+                    <input type="text" id="player-input-${idx}" value="${escapeHtml(p)}" class="flex-1 px-3 py-1.5 bg-white border border-gray-300 rounded-lg text-xs focus:ring-1 focus:ring-golf-500 focus:outline-none">
+                </div>
+            `).join('');
+        }
+
+        function togglePlayerEdit() {
+            if (!window.isAdminLoggedIn) {
+                showStatus('選手名を変更するには管理者ログインが必要です。', true);
+                toggleAdminAuthModal();
+                return;
+            }
+
+            const box = document.getElementById('player-edit-box');
+            const btnText = document.getElementById('edit-players-btn-text');
+            if (box.classList.contains('hidden')) {
+                box.classList.remove('hidden');
+                btnText.innerText = "閉じる";
+            } else {
+                box.classList.add('hidden');
+                btnText.innerText = "選手名を編集";
+            }
+        }
+
+        async function savePlayerNames() {
+            const newPlayers = [];
+            for (let i = 0; i < 7; i++) {
+                const val = document.getElementById(`player-input-${i}`).value.trim();
+                if (!val) {
+                    showStatus(`選手${i+1}の名前を入力してください。`, true);
+                    return;
+                }
+                newPlayers.push(val);
+            }
+
+            window.players = newPlayers;
+            window.currentOrder = [...window.players];
+            await window.saveSettingsToCloud();
+
+            renderPlayerBadges();
+            renderDraggableList();
+            togglePlayerEdit();
+            showStatus('選手名を更新して全員に同期しました。');
+        }
+
+        async function resetPlayersToDefault() {
+            if (!window.isAdminLoggedIn) {
+                showStatus('操作を行うには管理者権限が必要です。', true);
+                toggleAdminAuthModal();
+                return;
+            }
+
+            if (confirm("選手名を初期設定に戻しますか？")) {
+                window.players = [...window.DEFAULT_PLAYERS];
+                window.currentOrder = [...window.players];
+                await window.saveSettingsToCloud();
+                renderPlayerBadges();
+                renderPlayerInputs();
+                renderDraggableList();
+                showStatus('選手名を初期状態にリセットしました。');
+            }
+        }
+
+        /* ---------------------------------------------------
+           ドラッグ＆ドロップ並び替え (DRAGGABLE LIST)
+        --------------------------------------------------- */
+        function renderDraggableList() {
+            const ul = document.getElementById('draggable-list');
+            if (!ul) return;
+            ul.innerHTML = '';
+
+            const rankBadges = [
+                'bg-amber-400 text-amber-950 border-amber-500 font-extrabold', // 1位
+                'bg-slate-300 text-slate-800 border-slate-400 font-bold',       // 2位
+                'bg-amber-700 text-amber-100 border-amber-800 font-bold',       // 3位
+                'bg-gray-100 text-gray-700 border-gray-300',
+                'bg-gray-100 text-gray-700 border-gray-300',
+                'bg-gray-100 text-gray-700 border-gray-300',
+                'bg-gray-100 text-gray-700 border-gray-300'
+            ];
+
+            window.currentOrder.forEach((playerName, index) => {
+                const li = document.createElement('li');
+                li.className = 'draggable-item flex items-center justify-between p-3.5 bg-white rounded-xl border border-gray-200 shadow-sm transition hover:border-golf-500 cursor-grab active:cursor-grabbing';
+                li.draggable = true;
+                li.dataset.index = index;
+
+                li.innerHTML = `
+                    <div class="flex items-center space-x-3 pointer-events-none">
+                        <span class="w-8 h-8 rounded-lg ${rankBadges[index]} border flex items-center justify-center text-sm shadow-sm">
+                            ${index + 1}
+                        </span>
+                        <span class="font-bold text-gray-800 text-sm sm:text-base">${escapeHtml(playerName)}</span>
+                    </div>
+                    <div class="flex items-center space-x-1">
+                        <button type="button" onclick="moveOrder(${index}, -1)" class="p-2 text-gray-400 hover:text-golf-700 rounded-lg hover:bg-gray-100 text-xs transition ${index === 0 ? 'opacity-20 cursor-not-allowed' : ''}" ${index === 0 ? 'disabled' : ''}>
+                            <i class="fa-solid fa-arrow-up"></i>
+                        </button>
+                        <button type="button" onclick="moveOrder(${index}, 1)" class="p-2 text-gray-400 hover:text-golf-700 rounded-lg hover:bg-gray-100 text-xs transition ${index === window.currentOrder.length - 1 ? 'opacity-20 cursor-not-allowed' : ''}" ${index === window.currentOrder.length - 1 ? 'disabled' : ''}>
+                            <i class="fa-solid fa-arrow-down"></i>
+                        </button>
+                        <div class="pl-2 text-gray-300">
+                            <i class="fa-solid fa-grip-vertical text-base"></i>
+                        </div>
+                    </div>
+                `;
+
+                addDragEvents(li);
+                ul.appendChild(li);
+            });
+        }
+
+        let dragStartIndex;
+
+        function addDragEvents(item) {
+            item.addEventListener('dragstart', (e) => {
+                dragStartIndex = +item.dataset.index;
+                item.classList.add('dragging');
+                e.dataTransfer.effectAllowed = 'move';
+            });
+
+            item.addEventListener('dragover', (e) => {
+                e.preventDefault();
+            });
+
+            item.addEventListener('drop', (e) => {
+                const dragEndIndex = +item.dataset.index;
+                swapItems(dragStartIndex, dragEndIndex);
+                item.classList.remove('dragging');
+            });
+
+            item.addEventListener('dragend', () => {
+                item.classList.remove('dragging');
+            });
+        }
+
+        function swapItems(fromIndex, toIndex) {
+            const itemToMove = window.currentOrder[fromIndex];
+            window.currentOrder.splice(fromIndex, 1);
+            window.currentOrder.splice(toIndex, 0, itemToMove);
+            renderDraggableList();
+        }
+
+        function moveOrder(index, direction) {
+            const newIndex = index + direction;
+            if (newIndex < 0 || newIndex >= window.currentOrder.length) return;
+            const temp = window.currentOrder[index];
+            window.currentOrder[index] = window.currentOrder[newIndex];
+            window.currentOrder[newIndex] = temp;
+            renderDraggableList();
+        }
+
+        /* ---------------------------------------------------
+           予想投票の送信 (SUBMIT PREDICTION)
+        --------------------------------------------------- */
+        async function submitPrediction() {
+            const nameInput = document.getElementById('voter-name');
+            const voterName = nameInput.value.trim();
+
+            if (!voterName) {
+                showStatus('お名前を入力してください。', true);
+                nameInput.focus();
+                return;
+            }
+
+            const now = new Date();
+            const newVote = {
+                id: 'vote_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4),
+                voterName: voterName,
+                prediction: [...window.currentOrder],
+                createdMs: now.getTime(),
+                timestamp: now.toLocaleString('ja-JP', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+            };
+
+            await window.saveVoteToCloud(newVote);
+
+            // モーダル表示準備
+            document.getElementById('confirm-voter-name').innerText = voterName;
+            const previewEl = document.getElementById('confirm-ranks-preview');
+            previewEl.innerHTML = window.currentOrder.map((p, idx) => `
+                <div class="flex justify-between items-center py-0.5 border-b border-golf-100/50 last:border-0">
+                    <span class="font-bold text-golf-800">${idx + 1}位</span>
+                    <span class="font-semibold text-gray-800">${escapeHtml(p)}</span>
+                </div>
+            `).join('');
+
+            document.getElementById('modal-confirm').classList.remove('hidden');
+            nameInput.value = '';
+        }
+
+        function closeModal() {
+            document.getElementById('modal-confirm').classList.add('hidden');
+        }
+
+        function closeModalAndSwitchList() {
+            closeModal();
+            switchTab('votes-list');
+        }
+
+        /* ---------------------------------------------------
+           投票一覧表示 (VOTES LIST)
+        --------------------------------------------------- */
+        function renderVotesList() {
+            const container = document.getElementById('votes-cards-container');
+            const badgeCount = document.getElementById('vote-count-badge');
+            if (badgeCount) badgeCount.innerText = window.votes.length;
+
+            if (!container) return;
+
+            if (window.votes.length === 0) {
+                container.innerHTML = `
+                    <div class="text-center py-12 text-gray-400 bg-gray-50 rounded-xl border border-dashed border-gray-200">
+                        <i class="fa-solid fa-inbox text-4xl mb-2"></i>
+                        <p class="text-sm">まだ予想投票が届いていません。</p>
+                    </div>
+                `;
+                return;
+            }
+
+            container.innerHTML = window.votes.map(vote => `
+                <div class="bg-gray-50 rounded-xl p-4 border border-gray-200 hover:border-golf-300 transition shadow-sm">
+                    <div class="flex justify-between items-center mb-3">
+                        <div class="flex items-center space-x-2">
+                            <div class="w-8 h-8 rounded-full bg-golf-700 text-white flex items-center justify-center font-bold text-xs">
+                                ${escapeHtml(vote.voterName.charAt(0))}
+                            </div>
+                            <div>
+                                <h3 class="font-bold text-gray-900 text-sm sm:text-base">${escapeHtml(vote.voterName)}</h3>
+                                <p class="text-[10px] text-gray-400">${vote.timestamp || ''}</p>
+                            </div>
+                        </div>
+                        ${window.isAdminLoggedIn ? `
+                            <button onclick="deleteVote('${vote.id}')" class="text-red-400 hover:text-red-600 p-1 text-xs transition" title="削除">
+                                <i class="fa-solid fa-trash"></i>
+                            </button>
+                        ` : ''}
+                    </div>
+
+                    <!-- 1位〜7位横並びリスト -->
+                    <div class="grid grid-cols-7 gap-1 sm:gap-2 text-center text-xs">
+                        ${vote.prediction.map((p, idx) => `
+                            <div class="bg-white p-1.5 rounded-lg border border-gray-200 flex flex-col items-center justify-between">
+                                <span class="text-[10px] font-bold text-gray-400 mb-0.5">${idx+1}位</span>
+                                <span class="font-semibold text-gray-800 text-[11px] sm:text-xs truncate w-full" title="${escapeHtml(p)}">${escapeHtml(p)}</span>
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        async function deleteVote(id) {
+            if (!window.isAdminLoggedIn) {
+                showStatus('削除を行うには管理者ログインが必要です。', true);
+                toggleAdminAuthModal();
+                return;
+            }
+
+            if (confirm("この予想データを削除しますか？")) {
+                await window.deleteVoteFromCloud(id);
+            }
+        }
+
+        /* ---------------------------------------------------
+           確定結果の設定 & 集計リーダーボード (ADMIN & RESULTS)
+        --------------------------------------------------- */
+        function renderActualResultInputs() {
+            const container = document.getElementById('actual-results-inputs');
+            if (!container) return;
+            container.innerHTML = Array.from({ length: 7 }).map((_, idx) => `
+                <div class="flex items-center space-x-2 bg-gray-50 p-2.5 rounded-xl border border-gray-200">
+                    <span class="w-12 text-xs font-bold text-golf-800 text-center">${idx + 1}位:</span>
+                    <select id="actual-rank-${idx}" class="flex-1 bg-white border border-gray-300 rounded-lg p-2 text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-golf-500">
+                        <option value="">-- 選手を選択 --</option>
+                        ${window.players.map(p => `
+                            <option value="${escapeHtml(p)}" ${window.actualResults[idx] === p ? 'selected' : ''}>${escapeHtml(p)}</option>
+                        `).join('')}
+                    </select>
+                </div>
+            `).join('');
+        }
+
+        async function calculateResults() {
+            if (!window.isAdminLoggedIn) {
+                showStatus('結果を確定するには管理者権限が必要です。', true);
+                toggleAdminAuthModal();
+                return;
+            }
+
+            const selectedResults = [];
+            const checkSet = new Set();
+
+            for (let i = 0; i < 7; i++) {
+                const val = document.getElementById(`actual-rank-${i}`).value;
+                if (!val) {
+                    showStatus(`${i + 1}位の選手が選択されていません。`, true);
+                    return;
+                }
+                if (checkSet.has(val)) {
+                    showStatus(`選手「${val}」が重複して選択されています。`, true);
+                    return;
+                }
+                checkSet.add(val);
+                selectedResults.push(val);
+            }
+
+            window.actualResults = selectedResults;
+            await window.saveSettingsToCloud();
+
+            renderLeaderboard();
+            showStatus('確定結果を全端末へ同期配信しました！');
+        }
+
+        function renderLeaderboard() {
+            const container = document.getElementById('leaderboard-container');
+            if (!container) return;
+
+            if (window.actualResults.some(r => !r)) {
+                container.innerHTML = `
+                    <div class="text-center py-8 text-gray-400 text-sm">
+                        幹事様が確定結果を入力すると、ここにランキングが表示されます。
+                    </div>
+                `;
+                return;
+            }
+
+            if (window.votes.length === 0) {
+                container.innerHTML = `
+                    <div class="text-center py-8 text-gray-400 text-sm">
+                        予想投票がまだありません。
+                    </div>
+                `;
+                return;
+            }
+
+            const scoredVotes = window.votes.map(vote => {
+                let exactMatches = 0;
+                const matchDetails = vote.prediction.map((p, idx) => {
+                    const isMatch = p === window.actualResults[idx];
+                    if (isMatch) exactMatches++;
+                    return { player: p, isMatch };
+                });
+
+                return {
+                    ...vote,
+                    exactMatches,
+                    isPerfect: exactMatches === 7,
+                    matchDetails
+                };
+            });
+
+            scoredVotes.sort((a, b) => b.exactMatches - a.exactMatches);
+
+            container.innerHTML = `
+                <!-- 確定順位まとめ -->
+                <div class="bg-golf-900 text-white p-4 rounded-xl mb-6 shadow-inner">
+                    <h3 class="text-xs font-bold text-golf-100 uppercase tracking-wider mb-2"><i class="fa-solid fa-circle-check text-golf-gold mr-1"></i>確定順位</h3>
+                    <div class="grid grid-cols-7 gap-1 text-center text-xs">
+                        ${window.actualResults.map((p, idx) => `
+                            <div class="bg-golf-800 p-1.5 rounded-lg border border-golf-700">
+                                <span class="text-[10px] text-golf-gold block font-bold">${idx+1}位</span>
+                                <span class="font-semibold text-white text-[11px] sm:text-xs truncate block">${escapeHtml(p)}</span>
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+
+                <!-- ランキングカード一覧 -->
+                <div class="space-y-3">
+                    ${scoredVotes.map((sv, idx) => {
+                        let rankBadge = `<span class="font-bold text-gray-500 w-6 text-center">${idx + 1}</span>`;
+                        let cardBg = "bg-white border-gray-200";
+
+                        if (sv.isPerfect) {
+                            cardBg = "bg-amber-50 border-amber-300 ring-2 ring-amber-400";
+                            rankBadge = `<span class="bg-amber-400 text-amber-950 font-extrabold text-xs px-2 py-1 rounded-md shadow">全的中!</span>`;
+                        } else if (idx === 0) {
+                            rankBadge = `<span class="bg-golf-gold text-white font-extrabold text-xs px-2 py-1 rounded-md shadow">1位</span>`;
+                        }
+
+                        return `
+                            <div class="rounded-xl p-4 border shadow-sm ${cardBg} transition">
+                                <div class="flex justify-between items-center mb-2">
+                                    <div class="flex items-center space-x-3">
+                                        ${rankBadge}
+                                        <span class="font-bold text-gray-900 text-base">${escapeHtml(sv.voterName)}</span>
+                                    </div>
+                                    <div class="text-right">
+                                        <span class="text-xs text-gray-500">的中数:</span>
+                                        <span class="text-lg font-black text-golf-700 ml-1">${sv.exactMatches}</span>
+                                        <span class="text-xs font-bold text-gray-600">/ 7</span>
+                                    </div>
+                                </div>
+
+                                <div class="grid grid-cols-7 gap-1 text-center text-xs mt-3">
+                                    ${sv.matchDetails.map((detail, pIdx) => `
+                                        <div class="${detail.isMatch ? 'bg-golf-500 text-white ring-2 ring-golf-600 font-bold' : 'bg-gray-100 text-gray-500 opacity-80'} p-1.5 rounded-lg flex flex-col items-center justify-between transition">
+                                            <span class="text-[9px] ${detail.isMatch ? 'text-golf-100' : 'text-gray-400'}">${pIdx+1}位</span>
+                                            <span class="text-[11px] sm:text-xs truncate w-full">${escapeHtml(detail.player)}</span>
+                                            <i class="fa-solid ${detail.isMatch ? 'fa-check text-[10px] mt-0.5' : 'fa-xmark text-[9px] mt-0.5 opacity-30'}"></i>
+                                        </div>
+                                    `).join('')}
+                                </div>
+                            </div>
+                        `;
+                    }).join('')}
+                </div>
+            `;
+        }
+
+        /* ---------------------------------------------------
+           データ管理・エクスポート (DATA EXPORT & CLEAR)
+        --------------------------------------------------- */
+        function exportVotesData() {
+            if (window.votes.length === 0) {
+                showStatus('出力できる投票データがありません。', true);
+                return;
+            }
+
+            let text = "【ゴルフコンペ 7人順位予想 投票結果】\n";
+            text += `出力日時: ${new Date().toLocaleString('ja-JP')}\n`;
+            text += `対象選手: ${window.players.join(', ')}\n`;
+            text += "-----------------------------------\n";
+
+            window.votes.forEach((v, idx) => {
+                text += `${idx + 1}. ${v.voterName}\n`;
+                text += `   ${v.prediction.map((p, i) => `${i + 1}位:${p}`).join(' / ')}\n`;
+            });
+
+            document.getElementById('export-textarea').value = text;
+            document.getElementById('modal-export').classList.remove('hidden');
+        }
+
+        function closeExportModal() {
+            document.getElementById('modal-export').classList.add('hidden');
+        }
+
+        function copyExportText() {
+            const textarea = document.getElementById('export-textarea');
+            textarea.select();
+            document.execCommand('copy');
+            showStatus('テキストをクリップボードにコピーしました！');
+            closeExportModal();
+        }
+
+        async function clearAllVotes() {
+            if (!window.isAdminLoggedIn) {
+                showStatus('データ全消去には管理者ログインが必要です。', true);
+                toggleAdminAuthModal();
+                return;
+            }
+
+            if (confirm("本当にすべての投票データを消去しますか？この操作は取り消せません。")) {
+                await window.clearAllVotesFromCloud();
+                renderVotesList();
+                renderLeaderboard();
+            }
+        }
+
+        function escapeHtml(str) {
+            if (!str) return '';
+            return str
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;")
+                .replace(/"/g, "&quot;")
+                .replace(/'/g, "&#039;");
+        }
+    </script>
+</body>
+</html>
